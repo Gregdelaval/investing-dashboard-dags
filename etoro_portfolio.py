@@ -12,7 +12,7 @@ from airflow.operators.python import get_current_context
 	max_active_runs=1,
 	dagrun_timeout=timedelta(seconds=600),
 	default_args={
-	'retries': 2,
+	'retries': 1,
 	'retry_delay': timedelta(seconds=60),
 	},
 	params={
@@ -280,6 +280,7 @@ def etoro_portfolio():
 
 		@task
 		def extract_open_positions(**kwargs):
+			from json import JSONDecodeError
 			params = get_current_context()['params']
 
 			instrument_ids = kwargs['ti'].xcom_pull(
@@ -290,10 +291,15 @@ def etoro_portfolio():
 			MysqlConnector.remove_tables(f"{params['pre_dl']}.{params['raw_positions_table']}")
 			for instrument_id in instrument_ids:
 
-				instrument_positions = WebScrapers.extract_etoro_portfolio_positions(
-					instrument_id=instrument_id,
-					user=params['etoro_user_name'],
-				)
+				for i in range(3):
+					try:
+						instrument_positions = WebScrapers.extract_etoro_portfolio_positions(
+							instrument_id=instrument_id,
+							user=params['etoro_user_name'],
+						)
+						break
+					except JSONDecodeError:
+						continue
 
 				MysqlConnector.write_df_to_sql_database(
 					df=instrument_positions,
