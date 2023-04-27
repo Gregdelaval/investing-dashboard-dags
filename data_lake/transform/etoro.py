@@ -45,6 +45,8 @@ class EtoroSymbols(BaseTransformer):
 			treat_as_word=['ID'],
 		)
 
+		df.drop_duplicates(subset=['instrument_id'], keep='last', inplace=True)
+
 		df.dropna(
 			subset=[
 			'instrument_id',
@@ -104,6 +106,8 @@ class EtoroHistory(BaseTransformer):
 			columns_start_with_capital=True,
 			treat_as_word=['ID', 'CID'],
 		)
+
+		df.drop_duplicates(subset=['position_id'], keep='last', inplace=True)
 
 		df = df.astype(self.pandas_types)
 		return df
@@ -177,7 +181,6 @@ class EtoroOverview(BaseTransformer):
 			columns_start_with_capital=columns_start_with_capital,
 			treat_as_word=['ID', 'CID'],
 		)
-
 		df.astype(self.fetch_pandas_types(df))
 
 		return df
@@ -233,6 +236,8 @@ class EtoroPositions(BaseTransformer):
 			treat_as_word=['ID', 'CID'],
 		)
 
+		df.drop_duplicates(subset=['position_id'], keep='last', inplace=True)
+
 		df.astype(self.pandas_types)
 
 		df['open_date_time'] = pandas.to_datetime(df['open_date_time'], unit='ns')
@@ -285,6 +290,8 @@ class EtoroOrders(BaseTransformer):
 			columns_start_with_capital=True,
 			treat_as_word=['ID', 'CID'],
 		)
+
+		df.drop_duplicates(subset=['order_id'], keep='last', inplace=True)
 
 		df.astype(self.pandas_types)
 

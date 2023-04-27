@@ -43,6 +43,7 @@ from airflow.operators.python import get_current_context
 	},
 )
 def etoro_portfolio():
+	from json import JSONDecodeError
 	from helpers.helpers import MysqlConnector
 	from data_lake.extract.web_scrapers import WebScrapers
 	from airflow.hooks.base import BaseHook
@@ -105,10 +106,15 @@ def etoro_portfolio():
 			'Extracts a snapshot of the top 50 latest positions in etoro portfolio history'
 			context = get_current_context()
 
-			snapshot_df = WebScrapers.extract_recent_etoro_portfolio_history(
-				user=context['params']['etoro_user_name'],
-				current_date_time=context['ts'],
-			)
+			for i in range(3):
+				try:
+					snapshot_df = WebScrapers.extract_recent_etoro_portfolio_history(
+						user=context['params']['etoro_user_name'],
+						current_date_time=context['ts'],
+					)
+					break
+				except JSONDecodeError:
+					continue
 
 			MysqlConnector.write_df_to_sql_database(
 				df=snapshot_df,
@@ -190,7 +196,12 @@ def etoro_portfolio():
 			params = get_current_context()['params']
 
 			#Get snapshot containing multiple dfs holding different parts of response
-			dfs = WebScrapers.extract_etoro_portfolio_overview(user=params['etoro_user_name'])
+			for i in range(3):
+				try:
+					dfs = WebScrapers.extract_etoro_portfolio_overview(user=params['etoro_user_name'])
+					break
+				except JSONDecodeError:
+					continue
 
 			#Store tables from snapshot
 			MysqlConnector.write_df_to_sql_database(
@@ -280,7 +291,6 @@ def etoro_portfolio():
 
 		@task
 		def extract_open_positions(**kwargs):
-			from json import JSONDecodeError
 			params = get_current_context()['params']
 
 			instrument_ids = kwargs['ti'].xcom_pull(
