@@ -16,9 +16,15 @@ from airflow.operators.python import get_current_context
 	'retry_delay': timedelta(seconds=60),
 	},
 	params={
+	#---INPUT---#
+	#By default extracts recently updated financials.
+	#Can be overwritten by setting 'extract_only_following_symbols' to a list of symbols to extract.
+	'extract_only_following_symbols': [],
 	#---DEPENDENCIES---#
 	'calendar_schema': 'dl_company_information',
 	'calendar_table': 'earnings_calendar',
+	'index_information_schema': 'dl_index_information',
+	'constituents_table': 'consolidated_constituents_weights',
 	#---OUTPUT LOCATIONS---#
 	#SCHEMAS
 	'dl': 'dl_company_information',
@@ -45,23 +51,38 @@ def financial_statements():
 
 		context = get_current_context()
 
-		#Define symbols to extract data for
-		try:
-			symbols_to_extract = MysqlConnector.read_sql_query(
-				empty_resultset_policy='raise',
-				sql='''
-				SELECT DISTINCT `symbol`
-				FROM `{calendar_schema}`.`{calendar_table}`
-				WHERE `date` BETWEEN DATE('{start_date}') AND DATE('{end_date}')
-				'''.format(
-				calendar_schema=context['params']['calendar_schema'],
-				calendar_table=context['params']['calendar_table'],
-				start_date=pendulum.parse(context['ts']).subtract(days=3).strftime('%Y-%m-%d'),
-				end_date=pendulum.parse(context['ts']).subtract(days=1).strftime('%Y-%m-%d'),
-				),
-			)['symbol'].tolist()
-		except EmptyResultsetException:  #Stop pipeline if there are no new financials to extract
-			return False
+		if len(context['params']['extract_only_following_symbols']):
+			symbols_to_extract = context['params']['extract_only_following_symbols']
+		else:
+			#Define symbols to extract data for
+			try:
+				symbols_to_extract = MysqlConnector.read_sql_query(
+					empty_resultset_policy='raise',
+					sql='''
+					WITH earnings_calendar AS (
+						SELECT `date`, `symbol`
+						FROM `{calendar_schema}`.`{calendar_table}`
+					), constituents AS (
+						SELECT DISTINCT `asset`
+						FROM `{index_information_schema}`.`{constituents_table}`
+					)
+					SELECT
+						c.`asset`
+					FROM earnings_calendar ec
+					JOIN constituents c
+					ON c.`asset` = ec.`symbol`
+					WHERE ec.`date` BETWEEN DATE('{start_date}') AND DATE('{end_date}')
+					'''.format(
+					calendar_schema=context['params']['calendar_schema'],
+					calendar_table=context['params']['calendar_table'],
+					index_information_schema=context['params']['index_information_schema'],
+					constituents_table=context['params']['constituents_table'],
+					start_date=pendulum.parse(context['ts']).subtract(days=3).strftime('%Y-%m-%d'),
+					end_date=pendulum.parse(context['ts']).subtract(days=1).strftime('%Y-%m-%d'),
+					),
+				)['asset'].tolist()
+			except EmptyResultsetException:  #Stop pipeline if there are no new financials to extract
+				return False
 
 		kwargs['ti'].xcom_push('symbols_to_extract', symbols_to_extract)
 		return True
